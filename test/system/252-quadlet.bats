@@ -1542,4 +1542,27 @@ EOF
     service_cleanup $QUADLET_SERVICE_NAME inactive
     run_podman rmi $untagged_image:latest $built_image $(pause_image)
 }
+
+@test "quadlet - output and error message" {
+    local quadlet_file=$PODMAN_TMPDIR/basic_$(random_string).container
+    cat > $quadlet_file <<EOF
+[Container]
+Image=$IMAGE
+Exec=sh -c "echo I AM AN OUTPUT; echo I AM AN ERROR 1>&2; sleep inf"
+EOF
+
+    run_quadlet "$quadlet_file"
+    service_setup $QUADLET_SERVICE_NAME
+
+    run journalctl "--since=$STARTED_TIME" --unit="$QUADLET_SERVICE_NAME"
+    assert "$output" =~ 'I AM AN OUTPUT' "Output can be found with journalctl"
+    assert "$output" =~ 'I AM AN ERROR' "Error can be found with journalctl"
+    assert "$output" =~ "Starting $QUADLET_SERVICE_NAME" "Status information can be found with journalctl"
+
+    run journalctl "--since=$STARTED_TIME" -p 3 --unit="$QUADLET_SERVICE_NAME"
+    assert "$output" =~ 'I AM AN ERROR' "Error can be found with journalctl -p 3"
+    assert "$output" != .*"I AM AN OUTPUT".* "Output can not be found with journalctl -p 3"
+
+    service_cleanup $QUADLET_SERVICE_NAME failed
+}
 # vim: filetype=sh
